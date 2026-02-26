@@ -1,48 +1,65 @@
-# User Documentation
+# Developer Documentation
 
-## 1. Provided Services
-The Inception infrastructure provides a fully containerized, high-availability WordPress environment consisting of three distinct, isolated services:
-* **NGINX:** The hardened entrypoint of the infrastructure. It is configured to accept traffic strictly on **Port 443** using the **TLSv1.3** protocol. All insecure Port 80 traffic is disabled.
-* **WordPress:** The application engine running on **php-fpm82**. It handles the CMS logic and processes dynamic PHP content.
-* **MariaDB:** The relational database management system (RDBMS) that stores all site content, user metadata, and configuration settings.
+## 1. Environment Setup from Scratch
+The project requires a Virtual Machine running **Debian** for `ext4` volume permission management.
 
-## 2. Operational Commands (Start and Stop)
-All commands must be executed from the root of the repository:
-* **Launch Site:** `make`
-	- Initializes host directories (`/home/eala-lah/data/`).
-	- Builds custom images from local Dockerfiles.
-	- Starts services in detached mode.
-* **Stop Site (Persistence Mode):** `make down`
-	- Stops and removes containers and networks.
-	- **Note:** This preserves all website data and database content stored on the host for reboot tests.
-* **Full Reset:** `make fclean`
-	- Stops the stack, removes all images, and **permanently deletes** the `/home/eala-lah/data/` folders on the host machine. Use this to return the project to a "factory" state.
+### Step-by-Step Configuration:
+1. **Clone the Repository:** `git clone <repo_url> inception && cd inception`.
+2. **Create Secrets Directory:** `mkdir secrets` at the project root.
+3. **Populate Secret Files:** Create the following files with **no trailing spaces or newlines**:
+	* `secrets/db_password.txt`: Password for the author database user for `wp`.
+	* `secrets/db_root_password.txt`: Administrative password for MariaDB `root`.
+	* `secrets/credentials.txt`: Administrative password for the WordPress `supervisor`.
+4. **Configure Environment:** Edit `srcs/.env` and set `DOMAIN_NAME=eala-lah.42.fr`.
 
-## 3. Accessing the Site
-* **Public Website:** `https://eala-lah.42.fr`
-* **WordPress Admin Dashboard:** `https://eala-lah.42.fr/wp-admin`
-* **Administrator Account:** `supervisor` (Password in `secrets/credentials.txt`).
-* **Regular Author Account:** `author` (Password in `secrets/db_password.txt`).
+## 2. Infrastructure Build Logic
+Running `make` executes a specific build sequence:
+* **Host Prep:** Runs `sudo mkdir -p` to create `/home/eala-lah/data/mariadb` and `/home/eala-lah/data/wordpress`.
+* **Permission Enforcement:** Runs `sudo chmod 777` on the data directories immediately before launching Docker. This prevents 403 Forbidden and 502 Bad Gateway errors by ensuring the container users (`www-data` and `mysql`) have immediate write access to the host volumes.
+* **Build:** Orchestrates `docker compose` using **Alpine 3.19** images.
+* **PID 1 Management:** Every Dockerfile ensures the service daemon runs as **PID 1** in the foreground. No "hacky" background scripts (`&`, `tail -f`, `bash`) are used.
 
-## 4. Troubleshooting & Manual Verification
-### A. Verify Services are Running
-Run the following command:
-`docker ps`
-**Expected Result:** You must see three containers (`nginx`, `wordpress`, `mariadb`). The `STATUS` column must show `Up` and the `PORTS` column for NGINX must show `0.0.0.0:443->443/tcp`.
+## 3. Management Commands
+The project is managed entirely through the root `Makefile` to handle container and volume lifecycles safely.
 
-### B. Verify SSL/TLS Security (Port 443 & TLSv1.3)
-1. **Check for TLSv1.3 Protocol:**
-	`curl -I -v --tls-max 1.3 --tlsv1.3 https://eala-lah.42.fr 2>&1 | grep "SSL connection using"`
-	**Requirement:** Output must state `SSL connection using TLSv1.3`.
-2. **Verify Port 80 is Closed:**
-	`curl -I http://eala-lah.42.fr`
-	**Requirement:** Must result in `Connection refused`.
-3. **Verify Domain:**
-	`ping eala-lah.42.fr`
-	**Requirement:** Must resolve to `127.0.0.1`.
+### Makefile Targets:
+* `make` (or `make all`): Builds the images and starts the containers in detached mode. Natively prevents relinking if the infrastructure is already running.
+* `make down`: Gracefully stops and removes the containers and the default network. Data volumes remain intact.
+* `make clean`: Executes `make down` and runs `docker system prune -a --force` to clear unused images and cache.
+* `make fclean`: The nuclear option. Tears down containers, removes all images, orphans, and completely deletes the `/home/eala-lah/data` directories from the host machine.
+* `make re`: Executes `fclean` followed by `all` for a completely fresh build.
 
-### C. Locate Credentials
-Sensitive data is stored in the `secrets/` folder at the root:
-* `secrets/db_password.txt`
-* `secrets/db_root_password.txt`
-* `secrets/credentials.txt`
+### Docker Management:
+* **View running containers:** `docker compose -f srcs/docker-compose.yml ps`
+* **Inspect volumes:** `docker volume ls` followed by `docker volume inspect <volume_name>`
+
+## 4. Data Storage & Persistence Verification
+
+The project uses Docker volumes mapped to local host directories to ensure persistence.
+* **DB Path:** `/home/eala-lah/data/mariadb`
+* **WP Path:** `/home/eala-lah/data/wordpress`
+
+### How to Verify Persistence (Mandatory Defense Step):
+1. **Post:** Access `https://eala-lah.42.fr` and post a comment on the "Hello World" post.
+2. **Admin Login:** Access `https://eala-lah.42.fr/wp-admin` and log in using the **administrator credentials** found in `secrets/credentials.txt`.
+3. **Approve:** Navigate to the **Comments** menu in the sidebar, hover over the pending comment, and click **Approve**. Verify the comment is now visible on the public page.
+4. **Crash:** Execute `sudo reboot` on the VM.
+5. **Recover:** Once the VM is back, run `make` in the project root. (Note: While Docker may auto-restart containers, this step ensures all host permissions are verified and the stack is fully operational).
+6. **Verify:** Refresh the public site; the approved comment must still be visible.
+
+### Verify Penultimate Alpine Version:
+`docker exec wordpress cat /etc/os-release | grep "VERSION_ID"`
+**Requirement:** Should return `3.19.x`.
+
+### Verify Database Integrity:
+`docker exec -it mariadb mariadb -u root -p$(cat secrets/db_root_password.txt)`
+`USE wordpress; SHOW TABLES;`
+**Requirement:** Must return 12 tables, proving the volume is correctly mounted and populated.
+
+### Verify Process Isolation (No Hacky Tasks):
+`docker exec nginx ps aux`
+**Requirement:** PID 1 must be `nginx: master process`. No `bash`, `sh`, or `tail` processes should be running.
+
+### Verify Network Isolation:
+`docker network inspect inception`
+**Requirement:** Must show all three containers on the same bridge network with no `links` or `host` network enabled.

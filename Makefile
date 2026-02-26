@@ -1,34 +1,30 @@
-NAME	=	inception
+NAME		:= inception
+DATA_PATH	:= /home/eala-lah/data
+SRCDIR		:= srcs
+DOCKER_COM	:= $(SRCDIR)/docker-compose.yml
 
-all:
-	@printf "Launching configuration ${NAME}...\n"
-	@sudo mkdir -p /home/eala-lah/data/mariadb
-	@sudo mkdir -p /home/eala-lah/data/wordpress
-	@docker compose -f srcs/docker-compose.yml up --build -d
+MARIADB_DIR	:= $(DATA_PATH)/mariadb
+WORDPRESS_DIR	:= $(DATA_PATH)/wordpress
 
-help:
-	@printf "Available targets:\n"
-	@printf "  all     - Build and run the stack\n"
-	@printf "  down    - Stop and remove containers\n"
-	@printf "  re      - Full rebuild\n"
-	@printf "  clean   - Remove containers and unused images\n"
-	@printf "  fclean  - Remove everything including data volumes\n"
+.DEFAULT_GOAL := all
+
+all: $(MARIADB_DIR)
+
+$(MARIADB_DIR):
+	@sudo mkdir -p $(MARIADB_DIR) $(WORDPRESS_DIR)
+	@sudo chmod 777 $(MARIADB_DIR) $(WORDPRESS_DIR)
+	@docker compose -f $(DOCKER_COM) up --build -d
 
 down:
-	@printf "Stopping configuration ${NAME}...\n"
-	@docker compose -f srcs/docker-compose.yml down
+	@docker compose -f $(DOCKER_COM) down
+
+clean:
+	@docker compose -f $(DOCKER_COM) down -v --rmi all --remove-orphans || true
+	@docker system prune -a --force
+
+fclean: clean
+	@sudo rm -rf $(DATA_PATH)
 
 re: fclean all
 
-clean: down
-	@printf "Cleaning unused images and cache...\n"
-	@docker system prune -a --force
-
-fclean:
-	@printf "Total cleanup of ${NAME}...\n"
-	@docker compose -f srcs/docker-compose.yml down -v --rmi all
-	@sudo rm -rf /home/eala-lah/data/mariadb
-	@sudo rm -rf /home/eala-lah/data/wordpress
-	@printf "Data folders and images removed.\n"
-
-.PHONY: all down re clean fclean help
+.PHONY: all down clean fclean re
