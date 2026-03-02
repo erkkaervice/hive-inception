@@ -3,16 +3,17 @@ DATA_PATH	:= /home/eala-lah/data
 SRCDIR		:= srcs
 DOCKER_COM	:= $(SRCDIR)/docker-compose.yml
 
-MARIADB_DIR	:= $(DATA_PATH)/mariadb
+MARIADB_DIR		:= $(DATA_PATH)/mariadb
 WORDPRESS_DIR	:= $(DATA_PATH)/wordpress
+LOGS_DIR		:= $(DATA_PATH)/logs
 
-.DEFAULT_GOAL := all
+.DEFAULT_GOAL	:= all
 
 all: $(MARIADB_DIR)
 
 $(MARIADB_DIR):
-	@sudo mkdir -p $(MARIADB_DIR) $(WORDPRESS_DIR)
-	@sudo chmod 777 $(MARIADB_DIR) $(WORDPRESS_DIR)
+	@sudo mkdir -p $(MARIADB_DIR) $(WORDPRESS_DIR) $(LOGS_DIR)
+	@sudo chmod 777 $(MARIADB_DIR) $(WORDPRESS_DIR) $(LOGS_DIR)
 	@docker compose -f $(DOCKER_COM) up --build -d
 
 down:
