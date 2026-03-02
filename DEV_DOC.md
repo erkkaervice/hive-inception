@@ -1,80 +1,56 @@
 # Developer Documentation
 
-[Image of Docker microservices architecture with bonus containers]
-
 ## 1. Environment Setup from Scratch
 The project requires a Virtual Machine running **Debian** for `ext4` volume permission management.
 
 ### Step-by-Step Configuration:
 1. **Clone the Repository:** `git clone <repo_url> <name> && cd <name>`.
-2. **Secrets Generation:** The `Makefile` is configured to automatically create the `secrets/` directory and populate it with default passwords upon the first run. 
-3. **Manual Password Override (Optional):** If you wish to set custom passwords, create the following files in the `secrets/` directory with **no trailing spaces or newlines** before running `make`:
-	* `db_user_password.txt`: Password for the database user for `wp`.
-	* `db_root_password.txt`: Administrative password for MariaDB `root`.
-	* `wp_admin_password.txt`: Administrative password for the WordPress `supervisor`.
-	* `wp_user_password.txt`: Password for the regular WordPress user (`author`).
-	* `ftp_password.txt`: Password for the FTP user.
-4. **Configure Environment:** Edit `srcs/.env` and set `DOMAIN_NAME=eala-lah.42.fr`.
+2. **Secrets Setup:** Manually create a `secrets/` directory at the root of the project.
+3. **Manual Password Provisioning:** Create the following files in the `secrets/` directory. Each file must contain **only the password string** with no trailing newlines, spaces, or usernames:
+    * `db_user_password.txt`: Password for the database user.
+    * `db_root_password.txt`: Administrative password for MariaDB root.
+    * `wp_admin_password.txt`: Password for the WordPress administrator.
+    * `wp_user_password.txt`: Password for the regular WordPress user.
+    * `ftp_password.txt`: Password for the FTP user.
+4. **Configure Environment:** Edit `srcs/.env` to define your usernames (`MYSQL_USER`, `FTP_USER`, etc.) and your `DOMAIN_NAME`. The containers will map these usernames to the passwords stored in the `secrets/` files.
 
 ## 2. Infrastructure Build Logic
-Running `make` executes a specific build sequence:
-* **Secrets Prep:** Automatically generates the required password text files if they do not exist.
+Running `make` executes a strict, reproducible build sequence:
 * **Host Prep:** Runs `sudo mkdir -p` to create `/home/eala-lah/data/mariadb` and `/home/eala-lah/data/wordpress`.
-* **Permission Enforcement:** Runs `sudo chmod 777` on the data directories immediately before launching Docker. This prevents 403 Forbidden and 502 Bad Gateway errors by ensuring the container users (`www-data` and `mysql`) have immediate write access to the host volumes.
-* **Build:** Orchestrates `docker compose` using **Alpine 3.19** images for all 9 services (NGINX, WordPress, MariaDB, Redis, FTP, Adminer, GoAccess, Static Site, Cowsay).
-* **PID 1 Management:** Every Dockerfile ensures the service daemon runs as **PID 1** in the foreground. No "hacky" background scripts (`&`, `tail -f`, `bash`) are used.
+* **Permission Enforcement:** Runs `sudo chmod 777` on the host data directories. This ensures the container-specific users (`mysql` and `www-data`) have immediate write access to the volumes.
+* **Orchestration:** Launches `docker compose` using **Alpine 3.19** as the base image for all 9 services.
+* **PID 1 Management:** Every Dockerfile is written to ensure the service daemon runs as **PID 1**. This ensures proper signal handling and avoids "zombie" processes.
 
 ## 3. Management Commands
-The project is managed entirely through the root `Makefile` to handle container and volume lifecycles safely.
+The project lifecycle is managed via the `Makefile` to handle host-level dependencies alongside the containers.
 
 ### Makefile Targets:
-* `make` (or `make all`): Builds the images, generates secrets, and starts the containers in detached mode. Natively prevents relinking if the infrastructure is already running.
-* `make down`: Gracefully stops and removes the containers and the default network. Data volumes remain intact.
-* `make clean`: Executes `make down` and runs `docker system prune -a --force` to clear unused images and cache.
-* `make fclean`: The nuclear option. Tears down containers, removes all images, orphans, completely deletes the `/home/eala-lah/data` directories from the host machine, and deletes the `secrets/` folder.
-* `make re`: Executes `fclean` followed by `all` for a completely fresh build.
-
-### Docker Management:
-* **View running containers:** `docker compose -f srcs/docker-compose.yml ps`
-* **Inspect volumes:** `docker volume ls` followed by `docker volume inspect <volume_name>`
+* `make`: Builds images and starts the 9-container stack.
+* `make down`: Stops containers and removes the bridge network. **Volumes are preserved.**
+* `make clean`: Removes containers, networks, and all project-specific images.
+* `make fclean`: The "Nuclear Option." Performs a full clean and **permanently deletes** the `/home/eala-lah/data` directories and the `secrets/` folder.
+* `make re`: Triggers a full `fclean` followed by a fresh `make`.
 
 ## 4. Data Storage & Persistence Verification
+The project maps container internal paths to host directories for persistence:
+* **Database:** `/home/eala-lah/data/mariadb` ↔ `/var/lib/mysql`
+* **WordPress:** `/home/eala-lah/data/wordpress` ↔ `/var/www/html`
 
-The project uses Docker volumes mapped to local host directories to ensure persistence.
-* **DB Path:** `/home/eala-lah/data/mariadb`
-* **WP Path:** `/home/eala-lah/data/wordpress`
+### How to Verify Core Persistence:
+1. **Create Data:** Log in to `https://eala-lah.42.fr/wp-admin` and approve a comment.
+2. **Hard Reset:** Run `make down` followed by `make`.
+3. **Verify:** Access the site; the approved comment must still be visible.
 
-### How to Verify Core Persistence (Mandatory Defense Step):
-1. **Post:** Access `https://eala-lah.42.fr` and post a comment on the "Hello World" post.
-2. **Admin Login:** Access `https://eala-lah.42.fr/wp-admin` and log in using the **administrator password** found in `secrets/wp_admin_password.txt`.
-3. **Approve:** Navigate to the **Comments** menu in the sidebar, hover over the pending comment, and click **Approve**. Verify the comment is now visible on the public page.
-4. **Crash:** Execute `sudo reboot` on the VM.
-5. **Recover:** Once the VM is back, run `make` in the project root.
-6. **Verify:** Refresh the public site; the approved comment must still be visible.
+## 5. Bonus Service Verification (CLI)
+Use the following commands (or your configured bash aliases) to prove service functionality:
 
-[Image of Redis object caching architecture with WordPress and MariaDB]
+* **Redis Object Cache:** `redis_test`
+* **FTP Access:** `ftp_test`
+* **Cowsay TCP Service:** `cowsay_test`
+* **GoAccess Monitoring:** Verify `report.html` exists in the WordPress volume or access port `7890`.
+* **Adminer/Static Site:** `curl -I http://eala-lah.42.fr:8080` and `8081`. 
 
-### How to Verify Bonus Services:
-* **Redis Object Cache:** Run `docker exec wordpress php /usr/local/bin/wp redis status --allow-root`. Must return `Status: Connected` and `Drop-in: Valid`.
-* **FTP Access:** Run `curl ftp://localhost:21 --user "ftp_user:$(cat secrets/ftp_password.txt)"`. Must list the WordPress directory contents.
-* **Adminer UI:** Run `curl -I http://localhost:8080`. Must return `HTTP/1.1 200 OK`.
-* **Static Site:** Run `curl -I http://localhost:8081`. Must return `HTTP/1.0 200 OK`.
-* **Cowsay TCP Listener:** Run `nc -vz localhost 4243`. Must return `open`.
-* **GoAccess Analyzer:** Generate traffic (`curl -k -s -o /dev/null https://eala-lah.42.fr`), then open `http://eala-lah.42.fr:7890` in a browser to view the live WebSocket dashboard.
-
-### Verify Penultimate Alpine Version:
-`docker exec wordpress cat /etc/os-release | grep "VERSION_ID"`
-**Requirement:** Should return `3.19.x`.
-
-### Verify Database Integrity:
-`docker exec -it mariadb mariadb -u root -p$(cat secrets/db_root_password.txt)`
-`USE wordpress; SHOW TABLES;`
-**Requirement:** Must return 12 tables, proving the volume is correctly mounted and populated.
-
-### Verify Process Isolation (No Hacky Tasks):
-`docker exec nginx ps aux`
-**Requirement:** PID 1 must be `nginx: master process`. No `bash`, `sh`, or `tail` processes should be running.
-
-### Verify Network Isolation:
-`docker network inspect inception`
-**Requirement:** Must show all 9 containers on the same bridge network with no `links` or `host` network enabled.
+## 6. System Integrity Checks
+* **Alpine Version:** `docker exec wordpress cat /etc/os-release` (Must be 3.19.x).
+* **PID 1 Isolation:** `docker exec nginx ps aux` (Master process must be PID 1).
+* **Network Isolation:** `docker network inspect inception` (Should show all 9 containers on the same bridge network).
