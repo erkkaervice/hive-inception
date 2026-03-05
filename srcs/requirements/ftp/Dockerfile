@@ -1,7 +1,7 @@
 FROM		alpine:3.22
 
 # Install vsftpd
-RUN			apk update && apk add --no-cache vsftpd
+RUN			apk update && apk add --no-cache vsftpd openssl
 
 # Copy and prepare the startup script
 COPY		tools/ftp-setup.sh /usr/local/bin/ftp-setup.sh

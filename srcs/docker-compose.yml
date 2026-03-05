@@ -124,7 +124,7 @@ services:
     container_name: cowsay
     restart: always
     ports:
-      - "4243:4242"
+      - "4243:4243"
     networks:
       - inception
 

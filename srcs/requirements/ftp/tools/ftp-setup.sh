@@ -3,12 +3,25 @@
 # Add user and set password from the mounted secret file.
 # -D : Do not assign a password during creation (handled by chpasswd).
 # -h : Set the home directory directly to the WordPress volume.
-adduser -D -h /var/www/html $FTP_USER
+if ! id -u "$FTP_USER" >/dev/null 2>&1; then
+	adduser -D -h /var/www/html $FTP_USER
+fi
 echo "$FTP_USER:$(cat /run/secrets/ftp_password)" | chpasswd
+
+# Generate SSL certificates for vsftpd if they do not already exist.
+# vsftpd is strictly configured to enforce SSL; if these files are missing, the daemon will fatally crash on startup.
+mkdir -p /etc/ssl/private /etc/ssl/certs
+if [ ! -f /etc/ssl/certs/nginx-selfsigned.crt ]; then
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+		-keyout /etc/ssl/private/nginx-selfsigned.key \
+		-out /etc/ssl/certs/nginx-selfsigned.crt \
+		-subj "/C=FI/ST=Uusimaa/L=Helsinki/O=42/OU=ftp/CN=eala-lah.42.fr"
+fi
 
 # Generate the vsftpd configuration file dynamically.
 cat << EOF > /etc/vsftpd/vsftpd.conf
 listen=YES
+background=NO
 listen_ipv6=NO
 anonymous_enable=NO
 local_enable=YES
