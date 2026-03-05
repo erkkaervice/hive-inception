@@ -94,8 +94,8 @@ else
 fi
 
 # 11. Check Alpine Version
-echo -n "Checking Alpine Version (3.19.x)... "
-if docker exec wordpress cat /etc/os-release | grep -q "3.19"; then
+echo -n "Checking Alpine Version (3.22.x)... "
+if docker exec wordpress cat /etc/os-release | grep -q "3.22"; then
 	echo -e "${GREEN}PASS${NC}"
 else
 	echo -e "${RED}FAIL${NC}"

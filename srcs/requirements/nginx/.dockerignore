@@ -1,4 +1,18 @@
-.env
+# Git
 .git
 .gitignore
+
+# Secrets & Environment (Crucial for 42 evaluation)
+.env
 secrets/
+*.txt
+
+# Docker-related (Optimizes cache and prevents recursion)
+docker-compose.yml
+.dockerignore
+Dockerfile
+
+# OS generated files (Prevents host OS junk from entering containers)
+.DS_Store
+Thumbs.db
+*.md

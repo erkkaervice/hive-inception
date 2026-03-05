@@ -1,12 +1,16 @@
 [mysqld]
-user = mysql
-port = 3306
-basedir = /usr
-datadir = /var/lib/mysql
-socket = /run/mysqld/mysqld.sock
-bind-address = 0.0.0.0
-skip-networking = false
+# Basic Configuration
+user			= mysql
+port			= 3306
+basedir			= /usr
+datadir			= /var/lib/mysql
+socket			= /run/mysqld/mysqld.sock
 
-# Optimization for small VM
-query_cache_size = 32M
-innodb_buffer_pool_size = 128M
+# Network Settings
+# Bind to 0.0.0.0 to allow incoming connections from the Docker bridge network
+bind-address	= 0.0.0.0
+skip-networking	= false
+
+# Performance Tuning (Optimized for small Virtual Machines)
+query_cache_size		= 32M
+innodb_buffer_pool_size	= 128M

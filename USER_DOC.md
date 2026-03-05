@@ -8,7 +8,7 @@ The Inception infrastructure provides a fully containerized environment consisti
 * **Redis:** In-memory data store used as an object cache for WordPress.
 * **FTP Server:** Provides secure access to the WordPress volume for file management.
 * **Adminer:** Lightweight web UI for database management.
-* **Static Website:** Secondary non-PHP web service (Python-based).
+* **Static Website:** Secondary non-PHP web service.
 * **GoAccess:** Real-time log analyzer providing traffic dashboards.
 * **Cowsay:** Bonus TCP service demonstrating raw socket communication via `socat`.
 
@@ -17,7 +17,7 @@ All commands must be executed from the root of the repository. **Pre-requisite:*
 
 * **Start the Project:**
     `make`
-    Initializes host directories (`/home/eala-lah/data/`), builds custom images from local Dockerfiles, and launches the 9-service stack.
+    Initializes host directories (`/home/eala-lah/data/`), builds custom images, and launches the 9-service stack.
 
 * **Stop the Project (Preserve Data):**
     `make down`
@@ -34,8 +34,8 @@ Verify connectivity via browser or CLI:
 * **Adminer Database Manager:** `http://eala-lah.42.fr:8080`
 * **Static Website:** `http://eala-lah.42.fr:8081`
 * **GoAccess Live Logs:** `http://eala-lah.42.fr:7890`
-* **FTP Server:** Port 21 (Use `ftp_test` alias).
-* **Cowsay Service:** Port 4243 (Use `nc localhost 4243` or `cowsay_test` alias).
+* **FTP Server:** Port 21 (Use credentials from `secrets/ftp_password.txt`).
+* **Cowsay Service:** Port 4243 (Use `nc localhost 4243`).
 
 ## 4. Locating and Managing Passwords
 Sensitive data is handled via Docker Secrets and environment variables. These must be defined prior to the build.
@@ -49,9 +49,6 @@ Sensitive data is handled via Docker Secrets and environment variables. These mu
     * `ftp_password.txt` (Password for the FTP User)
     * `srcs/.env` (Contains non-secret variables like domain name and usernames)
 
-* **Managing Passwords:**
-    To update credentials, modify the files in the `secrets/` directory. Because MariaDB initializes the database only once, changes to passwords require a `make fclean` and a fresh `make` to take effect.
-
 ## 5. Checking That Services Are Running Correctly
 
 ### A. Verify Container Status
@@ -61,7 +58,8 @@ Run the following command:
 
 ### B. Verify SSL/TLS Security
 1. **Check for TLS Protocol:**
-    `curl -I -v --tls-max 1.3 --tlsv1.3 https://eala-lah.42.fr 2>&1 | grep "SSL connection using"`
+    `docker exec nginx cat /etc/nginx/http.d/default.conf | grep ssl_protocols`
+    `echo | openssl s_client -connect localhost:443 2>/dev/null | grep "Protocol"`
     **Requirement:** Must show `TLSv1.3` (or TLSv1.2).
 2. **Verify Port 80 is Closed:**
     `curl -I http://eala-lah.42.fr`
@@ -70,6 +68,12 @@ Run the following command:
     `ping eala-lah.42.fr`
     **Requirement:** Must resolve to `127.0.0.1`.
 
-### C. Automated Test Suite
-Run the provided test script for a full system check:
-`./test.sh`
+### C. Database Integrity Check
+To verify that the database is correctly initialized and contains WordPress data:
+1. **Login to MariaDB Container:**
+   `docker exec -it mariadb mariadb -u root -p$(cat secrets/db_root_password.txt)`
+2. **Verify Data:**
+   - List databases: `SHOW DATABASES;`
+   - Select your database: `USE inception_db;` (or the name in your .env)
+   - List tables: `SHOW TABLES;`
+3. **Requirement:** You must see tables such as `wp_users`, `wp_posts`, and `wp_comments`. This proves the database is not empty and is synced with WordPress.

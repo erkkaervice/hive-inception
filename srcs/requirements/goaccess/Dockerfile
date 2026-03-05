@@ -1,18 +1,20 @@
-FROM	alpine:3.19
+FROM		alpine:3.22
 
-RUN	apk update && apk add --no-cache goaccess
+# Install GoAccess
+RUN			apk update && apk add --no-cache goaccess
 
 # Create the web root for the HTML report
-RUN	mkdir -p /var/www/html
+RUN			mkdir -p /var/www/html
 
-# Copy the setup script
-COPY	tools/goaccess-setup.sh /usr/local/bin/goaccess-setup.sh
-RUN	chmod +x /usr/local/bin/goaccess-setup.sh
+# Copy and prepare the setup script
+COPY		tools/goaccess-setup.sh /usr/local/bin/goaccess-setup.sh
+RUN			chmod +x /usr/local/bin/goaccess-setup.sh
 
-# GoAccess Web Interface
-EXPOSE	7890
+# Expose GoAccess Web Interface and WebSocket ports
+EXPOSE		7890
+EXPOSE		7891
 
-# WebSocket port for real-time updates
-EXPOSE	7891
-
+# Run the setup script via the JSON exec form.
+# The script must end with 'exec goaccess <flags>' to replace the shell process,
+# keeping the analyzer running strictly as PID 1.
 ENTRYPOINT	["sh", "/usr/local/bin/goaccess-setup.sh"]
